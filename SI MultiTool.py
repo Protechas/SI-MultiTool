@@ -1,19 +1,19 @@
 import os
+import sys
 import fitz
 import string
 import re
 import numpy as np
 import pandas as pd
-import tkinter as tk
-from tkinter import filedialog, messagebox
+from PyQt5 import QtWidgets, QtCore
+from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox, QLabel, QLineEdit, QPushButton, QProgressBar, QVBoxLayout, QHBoxLayout, QWidget
+from PyQt5.QtGui import QPainter, QBrush, QLinearGradient, QColor, QPalette, QRadialGradient, QPainterPath, QFontMetrics
+from PyQt5.QtCore import Qt, QEvent, QPoint, QRectF
 import time
 import threading
-from tkinter import ttk
 import csv
 import shutil
 import PyPDF2
-import sys
-from cx_Freeze import setup, Executable
 
 YELLOW = np.array([1.0, 1.0, 0.0])
 BLUE = np.array([0.0, 0.0, 1.0])
@@ -71,80 +71,203 @@ def extract_highlights(file_path):
                 highlights.append({"Year": file_path.split(os.sep)[-3], "Make": file_path.split(os.sep)[-4], "Model": file_path.split(os.sep)[-2], "System": system, "Text": highlighted_text, "Color": highlight_color})
     return highlights
 
-class BabyHipsGUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("S.I. Multi-Tool")
-        self.parent_directory_path = None
-        self.output_csv_path = None
-        self.output_directory = None
-        self.start_time = None
-        self.total_time_value = tk.StringVar()
-        self.total_time_value.set("N/A")
+class RoundedButton(QPushButton):
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        self.setMouseTracking(True)  # Enable mouse tracking for hover effects
+        self.hover = False  # Initialize hover state
+        self.cornerRadius = 10  # Adjust the corner radius as needed
 
-        self.root.configure(bg='sky blue')
+    def enterEvent(self, event):
+        self.hover = True
+        self.update()  # Trigger repaint on hover
 
-        self.input_frame = tk.Frame(root)
-        self.input_frame.pack(padx=10, pady=10)
+    def leaveEvent(self, event):
+        self.hover = False
+        self.update()  # Trigger repaint on hover exit
 
-        self.output_frame = tk.Frame(root)
-        self.output_frame.pack(padx=10, pady=10)
+def paintEvent(self, event):
+    painter = QPainter(self)
+    painter.setRenderHint(QPainter.Antialiasing)  # Enable antialiasing for smoother edges
 
-        self.extract_frame = tk.Frame(root)
-        self.extract_frame.pack(padx=10, pady=10)
+    # Define metrics for text positioning
+    font = painter.font()
+    font.setPointSize(12)  # Set the font size
+    painter.setFont(font)
+    metrics = QFontMetrics(font)
+    text_width = metrics.width(self.text())
+    text_height = metrics.height()
 
-        self.compress_frame = tk.Frame(root)
-        self.compress_frame.pack(padx=10, pady=10)
+    # Define button dimensions
+    button_width = text_width + 20  # Adjusted for padding
+    button_height = text_height + 10  # Adjusted for padding
 
-        self.progress_frame = tk.Frame(root)
-        self.progress_frame.pack(padx=10, pady=10)
+    # Draw rounded rectangle for button background
+    rect_path = QPainterPath()
+    rect_path.addRoundedRect(0, 0, button_width, button_height, self.cornerRadius, self.cornerRadius)
 
-        self.copy_frame = tk.Frame(root)
-        self.copy_frame.pack(padx=10, pady=10)
+    # Set clipping path to constrain the drawing area
+    painter.setClipPath(rect_path)
 
-        self.input_path_label = tk.Label(self.input_frame, text="Input Path:")
-        self.input_path_label.grid(row=0, column=0)
-        self.input_path_entry = tk.Entry(self.input_frame)
-        self.input_path_entry.grid(row=0, column=1)
-        self.pull_from_button = tk.Button(self.input_frame, text="Pull From", command=self.pull_from)
-        self.pull_from_button.grid(row=0, column=2)
+    # Setup colors based on hover state
+    if self.hover:
+        button_color = QColor("#3385ff")  # Lighter blue on hover
+        text_color = Qt.white
+    else:
+        button_color = QColor("#66ccff")  # Light blue background
+        text_color = Qt.black
 
-        self.output_path_label = tk.Label(self.output_frame, text="Output Path:")
-        self.output_path_label.grid(row=0, column=0)
-        self.output_path_entry = tk.Entry(self.output_frame)
-        self.output_path_entry.grid(row=0, column=1)
-        self.create_in_button = tk.Button(self.output_frame, text="Create In", command=self.create_in)
-        self.create_in_button.grid(row=0, column=2)
+    # Fill the rounded rectangle with the button color
+    painter.fillPath(rect_path, button_color)
 
-        self.compress_button = tk.Button(self.compress_frame, text="Compress Files", command=self.compress_pdfs)
-        self.compress_button.grid(row=0, column=0)
+    # Draw the button text in the center
+    text_x = (button_width - text_width) / 2
+    text_y = (button_height + text_height) / 2
 
-        self.progress_label = tk.Label(self.progress_frame, text="Progress:")
-        self.progress_label.grid(row=0, column=0)
-        self.progress_bar = ttk.Progressbar(self.progress_frame, length=200)
-        self.progress_bar.grid(row=0, column=1)
-        self.percentage_label = tk.Label(self.progress_frame, text="")
-        self.percentage_label.grid(row=0, column=2)
+    # Convert text_x and text_y to integers
+    text_x = int(text_x)
+    text_y = int(text_y)
 
-        self.estimated_time_label = tk.Label(self.progress_frame, text="Estimated Time Remaining:")
-        self.estimated_time_label.grid(row=1, column=0)
-        self.estimated_time_label_value = tk.Label(self.progress_frame, textvariable=self.total_time_value)
-        self.estimated_time_label_value.grid(row=1, column=1)
+    painter.setPen(text_color)
+    painter.drawText(text_x, text_y, self.text())
 
-        self.copy_yellow_button = tk.Button(self.copy_frame, text="Copy Yellow Highlights", command=self.copy_yellow_pages)
-        self.copy_yellow_button.grid(row=0, column=0)
-        self.copy_blue_button = tk.Button(self.copy_frame, text="Copy Blue Highlights", command=self.copy_blue_pages)
-        self.copy_blue_button.grid(row=0, column=1)
-        self.copy_yb_button = tk.Button(self.copy_frame, text="Copy Y/B Highlights", command=self.copy_yb_pages)
-        self.copy_yb_button.grid(row=0, column=2)
-        self.center_window()
+    # Draw each task on a separate line above the progress bar
+    for index, task in enumerate(self.tasks):
+        line_y = text_y + (index * (text_height + 5))  # Adjusted for spacing
+        painter.drawText(text_x, line_y, task)
 
-    def center_window(self):
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-        x = (screen_width - self.root.winfo_reqwidth()) // 2
-        y = (screen_height - self.root.winfo_reqheight()) // 2
-        self.root.geometry("+{}+{}".format(x, y))
+class BabyHipsGUI(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.title = "S.I. Multi-Tool"
+        self.dark_mode = False  # Track the theme status
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle(self.title)
+        self.setGeometry(100, 100, 300, 150)  # x, y, width, height
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        layout = QVBoxLayout(self.central_widget)
+
+        self.input_path_label = QLabel("Input Path:", self)
+        self.input_path_entry = QLineEdit(self)
+        self.pull_from_button = RoundedButton("Pull From", self)
+        self.pull_from_button.clicked.connect(self.pull_from)
+
+        input_layout = QHBoxLayout()
+        input_layout.addWidget(self.input_path_label)
+        input_layout.addWidget(self.input_path_entry)
+        input_layout.addWidget(self.pull_from_button)
+        layout.addLayout(input_layout)
+
+        self.output_path_label = QLabel("Output Path:", self)
+        self.output_path_entry = QLineEdit(self)
+        self.create_in_button = RoundedButton("Create In", self)
+        self.create_in_button.clicked.connect(self.create_in)
+
+        output_layout = QHBoxLayout()
+        output_layout.addWidget(self.output_path_label)
+        output_layout.addWidget(self.output_path_entry)
+        output_layout.addWidget(self.create_in_button)
+        layout.addLayout(output_layout)
+
+        self.compress_button = RoundedButton("Compress Files", self)
+        self.compress_button.clicked.connect(self.compress_pdfs)
+        layout.addWidget(self.compress_button)
+
+        self.progress_label = QLabel("Progress:", self)
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setTextVisible(False)
+        self.percentage_label = QLabel("", self)
+
+        progress_layout = QHBoxLayout()
+        progress_layout.addWidget(self.progress_label)
+        progress_layout.addWidget(self.progress_bar)
+        progress_layout.addWidget(self.percentage_label)
+        layout.addLayout(progress_layout)
+
+        self.copy_yellow_button = RoundedButton("Copy Yellow Highlights", self)
+        self.copy_yellow_button.clicked.connect(self.copy_yellow_pages)
+        self.copy_blue_button = RoundedButton("Copy Blue Highlights", self)
+        self.copy_blue_button.clicked.connect(self.copy_blue_pages)
+        self.copy_yb_button = RoundedButton("Copy Y/B Highlights", self)
+        self.copy_yb_button.clicked.connect(self.copy_yb_pages)
+
+        copy_layout = QHBoxLayout()
+        copy_layout.addWidget(self.copy_yellow_button)
+        copy_layout.addWidget(self.copy_blue_button)
+        copy_layout.addWidget(self.copy_yb_button)
+        layout.addLayout(copy_layout)
+
+        # Dark Mode Toggle Button
+        self.toggle_dark_mode_button = RoundedButton("Toggle Dark Mode", self)
+        self.toggle_dark_mode_button.clicked.connect(self.toggle_dark_mode)
+        layout.addWidget(self.toggle_dark_mode_button)
+
+        # Initialize default theme
+        self.toggle_dark_mode()
+
+    def toggle_dark_mode(self):
+        if self.dark_mode:
+            self.apply_default_theme()
+            self.toggle_dark_mode_button.setText("Dark Mode")
+        else:
+            self.apply_dark_theme()
+            self.toggle_dark_mode_button.setText("Light Mode")
+        self.dark_mode = not self.dark_mode
+
+    def apply_default_theme(self):
+        default_stylesheet = """
+        QWidget {
+            background-color: #f0f0f0;
+            color: #222;
+        }
+        QPushButton {
+            background-color: #0066cc;
+            color: #ffffff;
+            border-radius: 10px;
+            padding: 5px;
+        }
+        QPushButton:hover {
+            background-color: #004080;  /* Darker blue on hover */
+        }
+        QProgressBar {
+            border: 2px solid #cccccc;
+            border-radius: 5px;
+            background-color: #eeeeee;
+        }
+        QProgressBar::chunk {
+            background-color: #008080;  /* Matching teal tint */
+        }
+        """
+        self.setStyleSheet(default_stylesheet)
+
+    def apply_dark_theme(self):
+        dark_stylesheet = """
+        QWidget {
+            background-color: #333333;
+            color: #ffffff;
+        }
+        QPushButton {
+            background-color: #004d4d;  /* Dark teal */
+            color: #ffffff;
+            border-radius: 10px;
+            padding: 5px;
+        }
+        QPushButton:hover {
+            background-color: #002828;  /* Darker teal on hover */
+        }
+        QProgressBar {
+            border: 2px solid #555555;
+            border-radius: 5px;
+            background-color: #444444;
+        }
+        QProgressBar::chunk {
+            background-color: #00cccc;  /* Lighter teal for visibility in dark mode */
+        }
+        """
+        self.setStyleSheet(dark_stylesheet)
 
     def move_and_split_files(self):
         try:
@@ -234,10 +357,9 @@ class BabyHipsGUI:
             print(f"Error while compressing PDF: {str(e)}")
             
     def compress_pdfs(self):
-        parent_directory_path = self.input_path_entry.get()
-        output_csv_path = self.output_csv_path
+        parent_directory_path = self.input_path_entry.text()
         if not parent_directory_path:
-            messagebox.showerror("Error", "Please select an input directory.")
+            QMessageBox.critical(self, "Error", "Please select an input directory.")
             return
         compressed_files = []
         total_files = sum([len(files) for root, dirs, files in os.walk(parent_directory_path) if files])
@@ -255,13 +377,13 @@ class BabyHipsGUI:
                             print(f"Error while compressing PDF: {str(e)}")
                             time.sleep(1)
                     processed_files += 1
-                    total_percentage = (processed_files / total_files) * 100
+                    total_percentage = int((processed_files / total_files) * 100)  # Convert float to int
                     elapsed_time = time.time() - self.start_time
-                    remaining_time = (elapsed_time / total_percentage) * (100 - total_percentage)
-                    print(f"Compressing: {file}. Total Progress: {total_percentage:.2f}%")
-                    self.progress_bar['value'] = total_percentage
-                    self.percentage_label.config(text=f"{total_percentage:.2f}%")
-                    self.root.update_idletasks()
+                    remaining_time = (elapsed_time / total_percentage) * (100 - total_percentage) if total_percentage != 0 else float('inf')  # Avoid division by zero
+                    print(f"Compressing: {file}. Total Progress: {total_percentage}%")
+                    self.progress_bar.setValue(total_percentage)  # Use integer value for setting progress
+                    self.percentage_label.setText(f"{total_percentage}%")
+                    QApplication.processEvents()  # Process events to update the GUI
                     time.sleep(0.1)
         self.move_and_split_files()
         print(f'Compression and file moving/splitting complete.')
@@ -292,16 +414,16 @@ class BabyHipsGUI:
             print(f"Error while splitting PDF: {str(e)}")
     
     def pull_from(self):
-        directory_path = filedialog.askdirectory()
-        self.input_path_entry.delete(0, tk.END)
-        self.input_path_entry.insert(0, directory_path)
-        self.parent_directory_path = directory_path
+        directory_path = QFileDialog.getExistingDirectory(self, "Select Directory")
+        if directory_path:  # Only update if a directory was selected
+            self.input_path_entry.setText(directory_path)
+            self.parent_directory_path = directory_path
 
     def create_in(self):
-        directory_path = filedialog.askdirectory()
-        self.output_path_entry.delete(0, tk.END)
-        self.output_path_entry.insert(0, directory_path)
-        self.output_csv_path = os.path.join(directory_path, "Extracted Highlights.csv")
+        directory_path = QFileDialog.getExistingDirectory(self, "Select Directory")
+        if directory_path:  # Only update if a directory was selected
+            self.output_path_entry.setText(directory_path)
+            self.output_csv_path = os.path.join(directory_path, "Extracted Highlights.csv")
 
     def closest_color(self, color):
         color = np.array(color)
@@ -367,10 +489,10 @@ class BabyHipsGUI:
         return count
 
     def extract_highlights_action(self):
-        input_path = self.input_path_entry.get()
+        input_path = self.input_path_entry.text()
         output_csv_path = self.output_csv_path
         if not input_path:
-            messagebox.showerror("Error", "Please select an input directory.")
+            QMessageBox.critical(self, "Error", "Please select an input directory.")
             return
         makes = [os.path.join(input_path, make) for make in os.listdir(input_path) if os.path.isdir(os.path.join(input_path, make))]
         total_files = sum([self.count_files_in_make(make) for make in makes])
@@ -434,14 +556,15 @@ class BabyHipsGUI:
                         highlighted_text = ' '.join([word[4] for word in words])
                         printable = set(string.printable)
                         highlighted_text = ''.join(filter(lambda x: x in printable, highlighted_text))
-                        output_file_path = os.path.join(self.output_path_entry.get(), f"{os.path.splitext(os.path.basename(file_path))[0]}_{highlight_color}.pdf")
+                        output_file_path = os.path.join(self.output_path_entry.text(), f"{os.path.splitext(os.path.basename(file_path))[0]}_{highlight_color}.pdf")
                         new_doc = fitz.open()
                         new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
                         new_doc.save(output_file_path)
         doc.close()
 
     def copy_yellow_pages(self):
-        makes = [os.path.join(self.input_path_entry.get(), make) for make in os.listdir(self.input_path_entry.get()) if os.path.isdir(os.path.join(self.input_path_entry.get(), make))]
+        input_path = self.input_path_entry.text()
+        makes = [os.path.join(input_path, make) for make in os.listdir(input_path) if os.path.isdir(os.path.join(input_path, make))]
         for make in makes:
             years = [os.path.join(make, year) for year in os.listdir(make) if os.path.isdir(os.path.join(make, year))]
             for year in years:
@@ -452,10 +575,11 @@ class BabyHipsGUI:
                             if file.endswith(".pdf"):
                                 file_path = os.path.join(root, file)
                                 self.copy_pages(file_path, "Yellow")
-        messagebox.showinfo("Copy Yellow Highlights", "Yellow highlighted pages copied successfully!")
+        QMessageBox.information(self, "Copy Yellow Highlights", "Yellow highlighted pages copied successfully!")
 
     def copy_blue_pages(self):
-        makes = [os.path.join(self.input_path_entry.get(), make) for make in os.listdir(self.input_path_entry.get()) if os.path.isdir(os.path.join(self.input_path_entry.get(), make))]
+        input_path = self.input_path_entry.text()
+        makes = [os.path.join(input_path, make) for make in os.listdir(input_path) if os.path.isdir(os.path.join(input_path, make))]
         for make in makes:
             years = [os.path.join(make, year) for year in os.listdir(make) if os.path.isdir(os.path.join(make, year))]
             for year in years:
@@ -466,10 +590,12 @@ class BabyHipsGUI:
                             if file.endswith(".pdf"):
                                 file_path = os.path.join(root, file)
                                 self.copy_pages(file_path, "Blue")
-        messagebox.showinfo("Copy Blue Highlights", "Blue highlighted pages copied successfully!")
+        QMessageBox.information(self, "Copy Blue Highlights", "Blue highlighted pages copied successfully!")
 
     def copy_yb_pages(self):
-        makes = [os.path.join(self.input_path_entry.get(), make) for make in os.listdir(self.input_path_entry.get()) if os.path.isdir(os.path.join(self.input_path_entry.get(), make))]
+        input_path = self.input_path_entry.text()
+        output_path = self.output_path_entry.text()
+        makes = [os.path.join(input_path, make) for make in os.listdir(input_path) if os.path.isdir(os.path.join(input_path, make))]
         for make in makes:
             years = [os.path.join(make, year) for year in os.listdir(make) if os.path.isdir(os.path.join(make, year))]
             for year in years:
@@ -494,7 +620,7 @@ class BabyHipsGUI:
                                             elif annotation_color == "Blue":
                                                 has_blue = True
                                             if has_yellow and has_blue:
-                                                output_file_path = os.path.join(self.output_path_entry.get(), f"{os.path.splitext(os.path.basename(file_path))[0]}_YB.pdf")
+                                                output_file_path = os.path.join(output_path, f"{os.path.splitext(os.path.basename(file_path))[0]}_YB.pdf")
                                                 new_doc = fitz.open()
                                                 new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
                                                 for other_page_num in range(num_pages):
@@ -509,12 +635,10 @@ class BabyHipsGUI:
                                     if has_yellow and has_blue:
                                         break
                                 doc.close()
-        messagebox.showinfo("Copy Y/B Highlights", "Pages with both yellow and blue highlights copied successfully!")
-
-    def run(self):
-        self.root.mainloop()
+        QMessageBox.information(self, "Copy Y/B Highlights", "Pages with both yellow and blue highlights copied successfully!")
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = BabyHipsGUI(root)
-    root.mainloop()
+    app = QApplication([])
+    window = BabyHipsGUI()
+    window.show()
+    app.exec_()
